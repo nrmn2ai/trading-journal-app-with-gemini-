@@ -1,4 +1,4 @@
-name: Build iOS IPA & Release
+name: Pure Swift iOS Build
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios:
+  build-ios-swift:
     runs-on: macos-latest
     permissions:
       contents: write
@@ -15,58 +15,95 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
+      - name: Install Xcodegen
+        run: brew install xcodegen
 
-      - name: Prepare Standard Web Directory
+      - name: Create Native Swift & SwiftUI Files
         run: |
-          # ساخت یک پروژه کاملاً مجزا و تمیز با پوشه استاندارد www
-          mkdir -p capacitor-app/www
+          mkdir -p AppSource
           
-          # کپی کردن تمام فایل‌های وب شما به داخل این پوشه اختصاصی
-          cp index.html capacitor-app/www/
-          cp -i *.png capacitor-app/www/ 2>/dev/null || true
-          cp -i *.gif capacitor-app/www/ 2>/dev/null || true
-          cp -i *.jpg capacitor-app/www/ 2>/dev/null || true
-          cp -i *.js capacitor-app/www/ 2>/dev/null || true
-          cp -i *.css capacitor-app/www/ 2>/dev/null || true
+          # انتقال امن تمام فایل‌های وب (HTML/JS/CSS/تصاویر) به پوشه منابع اپلیکیشن
+          mkdir -p AppSource/WebAssets
+          find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name '.github' ! -name 'AppSource' -exec cp -r {} AppSource/WebAssets/ \; 2>/dev/null || true
+          
+          # ساخت فایل اصلی اجرای اپلیکیشن با SwiftUI
+          cat << 'EOF' > AppSource/NRMN2AIApp.swift
+          import SwiftUI
 
-      - name: Initialize Capacitor
+          @main
+          struct NRMN2AIApp: App {
+              var body: some Scene {
+                  WindowGroup {
+                      ContentView()
+                  }
+              }
+          }
+          EOF
+          
+          # ساخت مرورگر نیتیو اپل (WKWebView) برای اجرای ژورنال معاملاتی
+          cat << 'EOF' > AppSource/ContentView.swift
+          import SwiftUI
+          import WebKit
+
+          struct WebView: UIViewRepresentable {
+              func makeUIView(context: Context) -> WKWebView {
+                  let webView = WKWebView()
+                  // دادن دسترسی کامل برای خواندن فایل‌های لوکال (جلوگیری از صفحه سفید)
+                  webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
+                  return webView
+              }
+              
+              func updateUIView(_ uiView: WKWebView, context: Context) {
+                  if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "WebAssets") {
+                      uiView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
+                  }
+              }
+          }
+
+          struct ContentView: View {
+              var body: some View {
+                  WebView()
+                      .edgesIgnoringSafeArea(.all)
+              }
+          }
+          EOF
+
+      - name: Create Xcode Project using Xcodegen
         run: |
-          cd capacitor-app
-          npm init -y
-          npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
-          
-          # مقداردهی کاپاسیتور با اشاره مستقیم به پوشه www
-          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
-          npx cap add ios
+          cat << 'EOF' > project.yml
+          name: NRMN2AI
+          options:
+            bundleIdPrefix: com.nrmn2ai
+          targets:
+            NRMN2AI:
+              type: application
+              platform: iOS
+              deploymentTarget: "14.0"
+              sources: 
+                - path: AppSource
+              settings:
+                CODE_SIGNING_REQUIRED: NO
+                CODE_SIGNING_ALLOWED: NO
+                CODE_SIGN_IDENTITY: ""
+          EOF
+          xcodegen generate
 
-      - name: Build iOS App
+      - name: Build Pure Native iOS App
         run: |
-          cd capacitor-app/ios/App
-          sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '14.0'/g" Podfile
-          pod install --repo-update
-          
-          xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          xcodebuild clean build -project NRMN2AI.xcodeproj -scheme NRMN2AI -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
 
-          # استخراج هوشمند فایل خروجی 
-          APP_PATH=$(find . -name "App.app" -type d | head -n 1)
-          mkdir -p $GITHUB_WORKSPACE/Payload
-          cp -R "$APP_PATH" $GITHUB_WORKSPACE/Payload/
-          
       - name: Package to IPA
         run: |
-          cd $GITHUB_WORKSPACE
-          zip -r "NRMN2AI.ipa" Payload/
+          mkdir -p Payload
+          cp -R build/NRMN2AI.app Payload/
+          zip -r "NRMN2AI-Swift.ipa" Payload/
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: NRMN2AI.ipa
-          tag_name: v1.0.${{ github.run_number }}
-          name: "NRMN2AI iOS App v1.0.${{ github.run_number }}"
-          body: "Standard www directory build for NRMN2AI trading journal."
+          files: NRMN2AI-Swift.ipa
+          tag_name: v2.0.${{ github.run_number }}
+          name: "Native Swift App v2.0.${{ github.run_number }}"
+          body: "100% Native SwiftUI build. Goodbye Capacitor bugs!"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
