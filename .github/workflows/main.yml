@@ -1,4 +1,4 @@
-name: Pure Swift iOS Build
+name: Build Native iOS App
 
 on:
   push:
@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  build-ios-swift:
+  build-ios-native:
     runs-on: macos-latest
     permissions:
       contents: write
@@ -15,46 +15,46 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Install Xcodegen
+      - name: Install xcodegen
         run: brew install xcodegen
 
-      - name: Create Native Swift & SwiftUI Files
+      - name: Generate Swift Code & Prepare Assets
         run: |
+          # 1. ساخت یک پوشه امن برای انتقال فایل‌های وب شما
+          mkdir -p WebRoot
+          cp index.html WebRoot/ 2>/dev/null || true
+          cp *.js WebRoot/ 2>/dev/null || true
+          cp *.css WebRoot/ 2>/dev/null || true
+          cp *.png WebRoot/ 2>/dev/null || true
+          cp *.gif WebRoot/ 2>/dev/null || true
+          cp *.jpg WebRoot/ 2>/dev/null || true
+          cp manifest.json WebRoot/ 2>/dev/null || true
+
+          # 2. ساخت خودکار کدهای برنامه Swift (فایل JournalApp.swift)
           mkdir -p AppSource
-          
-          # انتقال امن تمام فایل‌های وب (HTML/JS/CSS/تصاویر) به پوشه منابع اپلیکیشن
-          mkdir -p AppSource/WebAssets
-          find . -maxdepth 1 ! -name '.' ! -name '.git' ! -name '.github' ! -name 'AppSource' -exec cp -r {} AppSource/WebAssets/ \; 2>/dev/null || true
-          
-          # ساخت فایل اصلی اجرای اپلیکیشن با SwiftUI
-          cat << 'EOF' > AppSource/NRMN2AIApp.swift
+          cat << 'EOF' > AppSource/JournalApp.swift
           import SwiftUI
+          import WebKit
 
           @main
-          struct NRMN2AIApp: App {
+          struct JournalApp: App {
               var body: some Scene {
                   WindowGroup {
                       ContentView()
                   }
               }
           }
-          EOF
-          
-          # ساخت مرورگر نیتیو اپل (WKWebView) برای اجرای ژورنال معاملاتی
-          cat << 'EOF' > AppSource/ContentView.swift
-          import SwiftUI
-          import WebKit
 
           struct WebView: UIViewRepresentable {
               func makeUIView(context: Context) -> WKWebView {
                   let webView = WKWebView()
-                  // دادن دسترسی کامل برای خواندن فایل‌های لوکال (جلوگیری از صفحه سفید)
+                  // اعطای دسترسی به فایل‌های لوکال برای جلوگیری از صفحه سفید
                   webView.configuration.preferences.setValue(true, forKey: "allowFileAccessFromFileURLs")
                   return webView
               }
-              
               func updateUIView(_ uiView: WKWebView, context: Context) {
-                  if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "WebAssets") {
+                  // خواندن فایل index.html از پوشه WebRoot
+                  if let url = Bundle.main.url(forResource: "index", withExtension: "html", subdirectory: "WebRoot") {
                       uiView.loadFileURL(url, allowingReadAccessTo: url.deletingLastPathComponent())
                   }
               }
@@ -62,25 +62,27 @@ jobs:
 
           struct ContentView: View {
               var body: some View {
-                  WebView()
-                      .edgesIgnoringSafeArea(.all)
+                  WebView().edgesIgnoringSafeArea(.all)
               }
           }
           EOF
 
-      - name: Create Xcode Project using Xcodegen
+      - name: Generate Xcode Project
         run: |
+          # ساخت تنظیمات نیتیو اپل برای کامپایل بدون ارور
           cat << 'EOF' > project.yml
-          name: NRMN2AI
+          name: TradingJournal
           options:
             bundleIdPrefix: com.nrmn2ai
           targets:
-            NRMN2AI:
+            TradingJournal:
               type: application
               platform: iOS
               deploymentTarget: "14.0"
-              sources: 
+              sources:
                 - path: AppSource
+                - path: WebRoot
+                  type: folder
               settings:
                 CODE_SIGNING_REQUIRED: NO
                 CODE_SIGNING_ALLOWED: NO
@@ -88,22 +90,22 @@ jobs:
           EOF
           xcodegen generate
 
-      - name: Build Pure Native iOS App
+      - name: Build App
         run: |
-          xcodebuild clean build -project NRMN2AI.xcodeproj -scheme NRMN2AI -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
+          xcodebuild clean build -project TradingJournal.xcodeproj -scheme TradingJournal -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
 
-      - name: Package to IPA
+      - name: Package IPA
         run: |
           mkdir -p Payload
-          cp -R build/NRMN2AI.app Payload/
-          zip -r "NRMN2AI-Swift.ipa" Payload/
+          cp -R build/TradingJournal.app Payload/
+          zip -r "NRMN2AI.ipa" Payload/
 
-      - name: Upload to GitHub Release
+      - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          files: NRMN2AI-Swift.ipa
-          tag_name: v2.0.${{ github.run_number }}
-          name: "Native Swift App v2.0.${{ github.run_number }}"
-          body: "100% Native SwiftUI build. Goodbye Capacitor bugs!"
+          files: NRMN2AI.ipa
+          tag_name: v4.0.${{ github.run_number }}
+          name: "iOS App v4.0.${{ github.run_number }}"
+          body: "Standalone Native SwiftUI Build"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
