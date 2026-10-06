@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Checkout Code
@@ -28,19 +28,36 @@ jobs:
       - name: Install Capacitor & Setup iOS
         run: |
           npm init -y
-          # قفل کردن نسخه‌ها روی ورژن ۶ برای جلوگیری از تداخل
           npm install @capacitor/core@6 @capacitor/ios@6 @capacitor/cli@6
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
           
-          # ایجاد پوشه iOS (اگر پادها اینجا ارور بدهند، پروسه متوقف نمی‌‌شود)
-          npx cap add ios || echo "Pod install failed initially, patching target..."
+          # ساخت فولدر iOS (اگر پادها ارور دادند، پروسه متوقف نشود تا ما اصلاحش کنیم)
+          npx cap add ios || echo "Initial pod install failed, applying force-patch..."
           
-          # ارتقای اجباری و هوشمندانه تارگت به iOS 15 در تمامی فایل‌های اپل
           cd ios/App
-          sed -i '' -e "s/platform :ios.*/platform :ios, '15.0'/" Podfile
-          sed -i '' -e "s/IPHONEOS_DEPLOYMENT_TARGET.*/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/" App.xcodeproj/project.pbxproj
           
-          # نصب مجدد پادها روی نسخه اصلاح‌شده
+          # بازنویسی کامل فایل تنظیمات اپل (Podfile) و تنظیم اجباری روی iOS 15.0
+          cat << 'EOF' > Podfile
+          require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+          platform :ios, '15.0'
+          use_frameworks!
+          target 'App' do
+            capacitor_pods
+          end
+          post_install do |installer|
+            capacitor_post_install(installer)
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
+              end
+            end
+          end
+          EOF
+          
+          # تغییر کدهای داخلی Xcode به iOS 15.0
+          sed "s/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" App.xcodeproj/project.pbxproj > proj.new && mv proj.new App.xcodeproj/project.pbxproj
+          
+          # نصب موفقیت‌آمیز پکیج‌های اپل روی فایل اصلاح‌شده
           pod install --repo-update
 
       - name: Build iOS App (Unsigned)
