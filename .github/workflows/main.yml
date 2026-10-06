@@ -20,42 +20,46 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Create Clean Web Directory
+      - name: Prepare Standard Web Directory
         run: |
-          # ساخت پوشه موقت برای وب
-          mkdir -p my-web-app
+          # ساخت یک پروژه کاملاً مجزا و تمیز با پوشه استاندارد www
+          mkdir -p capacitor-app/www
           
-          # کپی کردن فقط فایل‌های وب اصلی به داخل آن
-          cp index.html my-web-app/
-          cp *.js my-web-app/ 2>/dev/null || true
-          cp *.css my-web-app/ 2>/dev/null || true
+          # کپی کردن تمام فایل‌های وب شما به داخل این پوشه اختصاصی
+          cp index.html capacitor-app/www/
+          cp -i *.png capacitor-app/www/ 2>/dev/null || true
+          cp -i *.gif capacitor-app/www/ 2>/dev/null || true
+          cp -i *.jpg capacitor-app/www/ 2>/dev/null || true
+          cp -i *.js capacitor-app/www/ 2>/dev/null || true
+          cp -i *.css capacitor-app/www/ 2>/dev/null || true
 
-      - name: Initialize Capacitor App
+      - name: Initialize Capacitor
         run: |
-          cd my-web-app
+          cd capacitor-app
           npm init -y
           npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
-          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir .
+          
+          # مقداردهی کاپاسیتور با اشاره مستقیم به پوشه www
+          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
           npx cap add ios
 
-          # اصلاح نسخه پلتفرم به 14.0
-          cd ios/App
+      - name: Build iOS App
+        run: |
+          cd capacitor-app/ios/App
           sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '14.0'/g" Podfile
           pod install --repo-update
+          
+          xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
-          # ساخت خروجی نهایی
-          xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
-
-          # انتقال فایل IPA به ریشه اصلی پروژه
-          mkdir -p $GITHUB_WORKSPACE/output
-          cp -R build/App.app $GITHUB_WORKSPACE/output/
+          # استخراج هوشمند فایل خروجی 
+          APP_PATH=$(find . -name "App.app" -type d | head -n 1)
+          mkdir -p $GITHUB_WORKSPACE/Payload
+          cp -R "$APP_PATH" $GITHUB_WORKSPACE/Payload/
           
       - name: Package to IPA
         run: |
-          cd output
-          mkdir -p Payload
-          cp -R App.app Payload/
-          zip -r "$GITHUB_WORKSPACE/NRMN2AI.ipa" Payload/
+          cd $GITHUB_WORKSPACE
+          zip -r "NRMN2AI.ipa" Payload/
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -63,6 +67,6 @@ jobs:
           files: NRMN2AI.ipa
           tag_name: v1.0.${{ github.run_number }}
           name: "NRMN2AI iOS App v1.0.${{ github.run_number }}"
-          body: "Clean isolated build for NRMN2AI trading journal app."
+          body: "Standard www directory build for NRMN2AI trading journal."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
