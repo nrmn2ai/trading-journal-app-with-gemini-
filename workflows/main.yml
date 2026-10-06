@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
       - name: Checkout Code
@@ -25,27 +25,19 @@ jobs:
           mv temp_www www
           mv www/Index.html www/index.html 2>/dev/null || true
 
-      - name: Install Capacitor
+      - name: Install Capacitor & Patch Template
         run: |
           npm init -y
-          npm install @capacitor/core@6 @capacitor/ios@6 @capacitor/cli@6
-          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
-
-      - name: Add iOS Platform (Ignore Pod Errors)
-        continue-on-error: true
-        run: |
-          # این مرحله ممکن است ارور بدهد، اما گیت‌هاب آن را نادیده می‌‌گیرد و متوقف نمی‌شود
-          npx cap add ios
-
-      - name: Fix iOS Deployment Target & Install Pods
-        run: |
-          cd ios/App
-          # تغییر تضمینی نسخه iOS به 15.0 در تنظیمات پادها و ایکس‌کد
-          sed -i '' -e "s/platform :ios, '[0-9.]*'/platform :ios, '15.0'/g" Podfile
-          sed -i '' -e "s/IPHONEOS_DEPLOYMENT_TARGET = [0-9.]*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" App.xcodeproj/project.pbxproj
+          npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
           
-          # نصب دستی و موفقیت‌آمیز پادها پس از رفع مشکل
-          pod install --repo-update
+          echo "--- پچ کردن قالب پایه Capacitor پیش از ساخت پروژه ---"
+          # تغییر اجباری نسخه سیستم‌عامل در فایل‌های الگو قبل از اجرای بیلد
+          find node_modules/@capacitor/ios -type f -name "Podfile" -exec sed -i '' "s/platform :ios.*/platform :ios, '15.0'/g" {} +
+          find node_modules/@capacitor/ios -type f -name "project.pbxproj" -exec sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" {} +
+          
+          # ساخت پروژه با فایل‌های اصلاح‌شده
+          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
+          npx cap add ios
 
       - name: Build iOS App (Unsigned)
         run: |
