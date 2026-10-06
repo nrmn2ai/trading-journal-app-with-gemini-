@@ -25,25 +25,42 @@ jobs:
           cp -R * www/ 2>/dev/null || true
           rm -rf www/ios www/.github www/node_modules 2>/dev/null || true
 
-      - name: Install Capacitor & Add iOS Platform
+      - name: Install Capacitor & Add Platform (No Pods)
         run: |
           npm init -y
-          npm install @capacitor/core @capacitor/ios @capacitor/cli
+          npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
           
-          # اضافه کردن پلتفرم بدون نصب خودکار پادها برای جلوگیری از ارور
+          # اضافه کردن پلتفرم بدون اجرای خودکار پادها برای جلوگیری از ارور
           npx cap add ios --no-pod-install
 
-      - name: Fix Podfile Target & Sync
+      - name: Force Fix Podfile & Run Pod Install
         run: |
-          # اصلاح نسخه پلتفرم در Podfile از 13 به 14 (متناسب با نیاز Capacitor)
           cd ios/App
-          sed -i '' "s/platform :ios, '13.0'/platform :ios, '14.0'/g" Podfile
-          sed -i '' "s/platform :ios, '12.0'/platform :ios, '14.0'/g" Podfile
           
-          cd ../..
-          # اجرای همگام‌سازی با نسخه اصلاح‌شده
-          npx cap sync ios
+          # بازنویسی کامل Podfile و تنظیم اجباری روی iOS 14.0
+          cat << 'EOF' > Podfile
+          require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
+
+          platform :ios, '14.0'
+          use_frameworks!
+
+          target 'App' do
+            capacitor_pods
+          end
+
+          post_install do |installer|
+            capacitor_post_install(installer)
+            installer.pods_project.targets.each do |target|
+              target.build_configurations.each do |config|
+                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '14.0'
+              end
+            end
+          end
+          EOF
+          
+          # نصب دستی و موفقیت‌آمیز پادها روی تنظیمات جدید
+          pod install --repo-update
 
       - name: Build iOS App (Unsigned)
         run: |
