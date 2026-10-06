@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-13
 
     steps:
       - name: Checkout Code
@@ -25,40 +25,22 @@ jobs:
           mv temp_www www
           mv www/Index.html www/index.html 2>/dev/null || true
 
-      - name: Install Capacitor & Setup iOS
+      - name: Install & Patch Capacitor Source
         run: |
           npm init -y
           npm install @capacitor/core@6 @capacitor/ios@6 @capacitor/cli@6
+          
+          echo "--- در حال اصلاح کدهای پایه Capacitor قبل از ساخت پروژه ---"
+          find node_modules/@capacitor/ios -type f -name "Podfile" -exec sed -i '' -e "s/'13.0'/'15.0'/g" {} + || true
+          find node_modules/@capacitor/ios -type f -name "Podfile" -exec sed -i '' -e "s/'14.0'/'15.0'/g" {} + || true
+          find node_modules/@capacitor/ios -type f -name "project.pbxproj" -exec sed -i '' -e "s/13.0/15.0/g" {} + || true
+          find node_modules/@capacitor/ios -type f -name "project.pbxproj" -exec sed -i '' -e "s/14.0/15.0/g" {} + || true
+
+      - name: Create iOS Project
+        run: |
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
-          
-          # ساخت فولدر iOS (اگر پادها ارور دادند، پروسه متوقف نشود تا ما اصلاحش کنیم)
-          npx cap add ios || echo "Initial pod install failed, applying force-patch..."
-          
-          cd ios/App
-          
-          # بازنویسی کامل فایل تنظیمات اپل (Podfile) و تنظیم اجباری روی iOS 15.0
-          cat << 'EOF' > Podfile
-          require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
-          platform :ios, '15.0'
-          use_frameworks!
-          target 'App' do
-            capacitor_pods
-          end
-          post_install do |installer|
-            capacitor_post_install(installer)
-            installer.pods_project.targets.each do |target|
-              target.build_configurations.each do |config|
-                config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '15.0'
-              end
-            end
-          end
-          EOF
-          
-          # تغییر کدهای داخلی Xcode به iOS 15.0
-          sed "s/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" App.xcodeproj/project.pbxproj > proj.new && mv proj.new App.xcodeproj/project.pbxproj
-          
-          # نصب موفقیت‌آمیز پکیج‌های اپل روی فایل اصلاح‌شده
-          pod install --repo-update
+          # حالا این دستور بدون هیچ خطایی اجرا می‌شود چون فایل‌ها از قبل اصلاح شده‌اند
+          npx cap add ios
 
       - name: Build iOS App (Unsigned)
         run: |
