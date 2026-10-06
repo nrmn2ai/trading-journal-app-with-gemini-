@@ -32,22 +32,29 @@ jobs:
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
           npx cap add ios
 
+      - name: Sync Capacitor iOS
+        run: |
+          npx cap sync ios || true
+
       - name: Fix iOS Deployment Target
         shell: bash
         run: |
-          if [ -f ios/App/Podfile ]; then
-            perl -0pi -e "s/platform :ios, '[^']+'/platform :ios, '14.0'/g" ios/App/Podfile
+          cd ios/App
+
+          if [ -f Podfile ]; then
+            perl -0pi -e "s/platform :ios, '[^']+'/platform :ios, '14.0'/g" Podfile
             echo "Updated Podfile to iOS 14.0"
           fi
 
-          if [ -f ios/App/App.xcodeproj/project.pbxproj ]; then
-            perl -0pi -e "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]+;/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/g" ios/App/App.xcodeproj/project.pbxproj
+          if [ -f App.xcodeproj/project.pbxproj ]; then
+            perl -0pi -e "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]+;/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/g" App.xcodeproj/project.pbxproj
             echo "Updated Xcode deployment target to iOS 14.0"
           fi
 
-      - name: Sync Capacitor iOS
+      - name: Install Pods
         run: |
-          npx cap sync ios
+          cd ios/App
+          pod install --repo-update
 
       - name: Build iOS App (Unsigned)
         run: |
