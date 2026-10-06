@@ -20,12 +20,24 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Prepare Web Assets
+      - name: Prepare Clean Web Assets
         run: |
+          # ساخت پوشه تمیز برای وب‌اپلیکیشن
           mkdir -p www
+          
+          # کپی کردن فایل‌های اصلی پروژه (فقط فایل‌های وب و سورس کد شما)
+          # از کپی کردن پوشه‌های سیستم‌عامل، گیت و پوشه‌های موقت جلوگیری می‌کنیم
+          find . -maxdepth 1 ! -name '.' ! -name 'index.html' ! -name '*.html' ! -name '*.js' ! -name '*.css' ! -name 'src' ! -name 'public' ! -name 'assets' ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
+          
+          # انتقال یا کپی فایل‌های وب به داخل پوشه www
+          if [ -d "src" ]; then
+            cp -R src/* www/ 2>/dev/null || true
+          fi
+          if [ -d "public" ]; then
+            cp -R public/* www/ 2>/dev/null || true
+          fi
+          # اگر index.html در ریشه باشد
           cp index.html www/ 2>/dev/null || true
-          cp -R * www/ 2>/dev/null || true
-          rm -rf www/ios www/.github www/node_modules 2>/dev/null || true
 
       - name: Install Capacitor & Add Platform
         run: |
@@ -58,6 +70,6 @@ jobs:
           files: NRMN2AI.ipa
           tag_name: v1.0.${{ github.run_number }}
           name: "NRMN2AI iOS App v1.0.${{ github.run_number }}"
-          body: "Autonomous build for NRMN2AI trading journal app."
+          body: "Clean build for NRMN2AI trading journal app."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
