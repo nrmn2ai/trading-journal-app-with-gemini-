@@ -44,6 +44,28 @@ jobs:
             echo "✓ Updated Xcode project deployment target"
           fi
 
+          - name: Debug iOS project before sync
+  run: |
+    echo "---- Podfile ----"
+    sed -n '1,40p' ios/App/Podfile || true
+
+    echo "---- Deployment target ----"
+    grep -n "IPHONEOS_DEPLOYMENT_TARGET" ios/App/App.xcodeproj/project.pbxproj | head || true
+
+    - name: Fix iOS Deployment Target
+  run: |
+    cd ios/App
+
+    if [ -f Podfile ]; then
+      sed -i '' "s/platform :ios, '.*'/platform :ios, '14.0'/" Podfile
+      echo "Podfile updated"
+    fi
+
+    if [ -f App.xcodeproj/project.pbxproj ]; then
+      perl -0pi -e "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]+;/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/" App.xcodeproj/project.pbxproj
+      echo "Xcode target updated"
+    fi
+
       - name: Sync Capacitor iOS
         run: |
           npx cap sync ios
