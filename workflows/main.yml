@@ -5,23 +5,6 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
-- name: Fix iOS deployment target
-  shell: bash
-  run: |
-    cd ios/App
-
-    if [ -f Podfile ]; then
-      perl -0pi -e "s/platform :ios, '[^']+'/platform :ios, '14.0'/g" Podfile
-      grep -n "platform :ios" Podfile || true
-    fi
-
-    if [ -f App.xcodeproj/project.pbxproj ]; then
-      perl -0pi -e "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]+;/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/g" App.xcodeproj/project.pbxproj
-      grep -n "IPHONEOS_DEPLOYMENT_TARGET" App.xcodeproj/project.pbxproj | head || true
-    fi
-
-    pod install --repo-update
-
 jobs:
   build-ios:
     runs-on: macos-latest
@@ -37,39 +20,53 @@ jobs:
 
       - name: Prepare Web Assets
         run: |
-          mkdir -p temp_www
-          cp -R * temp_www/ 2>/dev/null || true
-          mv temp_www www
-          mv www/Index.html www/index.html 2>/dev/null || true
+          mkdir -p www
+          cp index.html www/
+          cp *.png www/ 2>/dev/null || true
+          cp *.gif www/ 2>/dev/null || true
 
-      - name: Install Cordova & Create Project
+      - name: Install Capacitor & Setup iOS
         run: |
-          # نصب Cordova برای حذف کامل نیاز به CocoaPods
-          npm install -g cordova
-          cordova create ios_app com.nrmn2ai.terminal "NRMN2AI"
-          
-          # انتقال تمام فایل‌های داشبورد شما به درون اپلیکیشن
-          rm -rf ios_app/www/*
-          cp -R www/* ios_app/www/
+          npm init -y
+          npm install @capacitor/core @capacitor/ios @capacitor/cli
+          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
+          npx cap add ios
 
-      - name: Add iOS Platform
+      - name: Fix iOS Deployment Target
         run: |
-          cd ios_app
-          # ساخت پلتفرم iOS بدون درگیر شدن با پکیج‌های اینترنتی اپل
-          cordova platform add ios
+          if [ -f ios/App/Podfile ]; then
+            perl -0pi -e "s/platform :ios, '[^']+'/platform :ios, '14.0'/g" ios/App/Podfile
+            echo "✓ Updated Podfile platform target"
+          fi
+
+          if [ -f ios/App/App.xcodeproj/project.pbxproj ]; then
+            perl -0pi -e "s/IPHONEOS_DEPLOYMENT_TARGET = [^;]+;/IPHONEOS_DEPLOYMENT_TARGET = 14.0;/g" ios/App/App.xcodeproj/project.pbxproj
+            echo "✓ Updated Xcode project deployment target"
+          fi
+
+      - name: Sync Capacitor iOS
+        run: |
+          npx cap sync ios
 
       - name: Build iOS App (Unsigned)
         run: |
-          cd ios_app/platforms/ios
-          # کامپایل مستقیم و سریع توسط خود Xcode
-          xcodebuild clean build -project NRMN2AI.xcodeproj -scheme NRMN2AI -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
+          cd ios/App
+          xcodebuild clean build \
+            -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CONFIGURATION_BUILD_DIR=$PWD/build
 
       - name: Package to IPA
         run: |
-          cd ios_app/platforms/ios/build
-          mkdir -p Payload
-          cp -R NRMN2AI.app Payload/
-          zip -r "$GITHUB_WORKSPACE/NRMN2AI.ipa" Payload/
+          cd ios/App/build
+          mkdir Payload
+          cp -R App.app Payload/
+          zip -r ../../../NRMN2AI.ipa Payload/
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
