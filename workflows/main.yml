@@ -5,6 +5,13 @@ on:
     branches: [ "main" ]
   workflow_dispatch:
 
+- name: Fix iOS deployment target
+  run: |
+    cd ios/App
+    ruby -pi -e "gsub(/platform :ios, ['\"][^'\"]+['\"]/, \"platform :ios, '14.0'\")" Podfile
+    ruby -pi -e "gsub(/IPHONEOS_DEPLOYMENT_TARGET = .*;/, 'IPHONEOS_DEPLOYMENT_TARGET = 14.0;')" App.xcodeproj/project.pbxproj
+    pod install --repo-update
+
 jobs:
   build-ios:
     runs-on: macos-latest
