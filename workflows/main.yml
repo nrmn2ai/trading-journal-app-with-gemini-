@@ -7,7 +7,6 @@ on:
 
 jobs:
   build-ios:
-    # استفاده از سیستم‌عامل پایدارتر برای جلوگیری از ارورهای خروجی
     runs-on: macos-13
 
     steps:
@@ -29,21 +28,20 @@ jobs:
       - name: Install Capacitor & Setup iOS
         run: |
           npm init -y
-          npm install @capacitor/core @capacitor/ios @capacitor/cli
+          # قفل کردن نسخه‌ها روی ورژن ۶ برای جلوگیری از تداخل
+          npm install @capacitor/core@6 @capacitor/ios@6 @capacitor/cli@6
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
           
-          # ساخت پروژه iOS (در صورت بروز خطای اولیه، متوقف نمی‌شود)
-          npx cap add ios || true
+          # ایجاد پوشه iOS (اگر پادها اینجا ارور بدهند، پروسه متوقف نمی‌‌شود)
+          npx cap add ios || echo "Pod install failed initially, patching target..."
           
-          # حل قطعی خطای CocoaPods با ارتقای اجباری نسخه هدف به iOS 15.0
+          # ارتقای اجباری و هوشمندانه تارگت به iOS 15 در تمامی فایل‌های اپل
           cd ios/App
-          sed -i '' "s/'13.0'/'15.0'/g" Podfile
-          sed -i '' "s/'14.0'/'15.0'/g" Podfile
-          sed -i '' "s/13.0/15.0/g" App.xcodeproj/project.pbxproj
-          sed -i '' "s/14.0/15.0/g" App.xcodeproj/project.pbxproj
+          sed -i '' -e "s/platform :ios.*/platform :ios, '15.0'/" Podfile
+          sed -i '' -e "s/IPHONEOS_DEPLOYMENT_TARGET.*/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/" App.xcodeproj/project.pbxproj
           
-          # نصب موفقیت‌آمیز پادها روی نسخه اصلاح‌شده
-          pod install
+          # نصب مجدد پادها روی نسخه اصلاح‌شده
+          pod install --repo-update
 
       - name: Build iOS App (Unsigned)
         run: |
