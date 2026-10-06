@@ -7,7 +7,8 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-latest
+    # استفاده از سیستم‌عامل پایدارتر برای جلوگیری از ارورهای خروجی
+    runs-on: macos-13
 
     steps:
       - name: Checkout Code
@@ -21,25 +22,32 @@ jobs:
       - name: Prepare Web Assets
         run: |
           mkdir -p temp_www
-          # کپی کردن تمام فایل‌های مخزن به صورت امن
           cp -R * temp_www/ 2>/dev/null || true
           mv temp_www www
-          # اصلاح خودکار نام فایل در صورت وجود حروف بزرگ
           mv www/Index.html www/index.html 2>/dev/null || true
 
       - name: Install Capacitor & Setup iOS
         run: |
           npm init -y
-          # استفاده از نسخه پایدار ۵ برای رفع قطعی ارور CocoaPods
-          npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
+          npm install @capacitor/core @capacitor/ios @capacitor/cli
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
-          npx cap add ios
-          npx cap sync ios
+          
+          # ساخت پروژه iOS (در صورت بروز خطای اولیه، متوقف نمی‌شود)
+          npx cap add ios || true
+          
+          # حل قطعی خطای CocoaPods با ارتقای اجباری نسخه هدف به iOS 15.0
+          cd ios/App
+          sed -i '' "s/'13.0'/'15.0'/g" Podfile
+          sed -i '' "s/'14.0'/'15.0'/g" Podfile
+          sed -i '' "s/13.0/15.0/g" App.xcodeproj/project.pbxproj
+          sed -i '' "s/14.0/15.0/g" App.xcodeproj/project.pbxproj
+          
+          # نصب موفقیت‌آمیز پادها روی نسخه اصلاح‌شده
+          pod install
 
       - name: Build iOS App (Unsigned)
         run: |
           cd ios/App
-          # کامپایل بدون نیاز به اکانت پولی اپل
           xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
 
       - name: Package to IPA
