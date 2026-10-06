@@ -1,0 +1,30 @@
+import SwiftUI
+import WebKit
+
+@main
+struct TradingJournalApp: App {
+    var body: some Scene {
+        WindowGroup {
+            JournalWebView()
+                .ignoresSafeArea()
+                .preferredColorScheme(.dark)
+        }
+    }
+}
+
+private struct JournalWebView: UIViewRepresentable {
+    func makeUIView(context: Context) -> WKWebView {
+        let configuration = WKWebViewConfiguration()
+        let webView = WKWebView(frame: .zero, configuration: configuration)
+        webView.isOpaque = false
+        webView.backgroundColor = UIColor(red: 13 / 255, green: 32 / 255, blue: 38 / 255, alpha: 1)
+        webView.scrollView.backgroundColor = webView.backgroundColor
+
+        if let page = Bundle.main.url(forResource: "index", withExtension: "html") {
+            webView.loadFileURL(page, allowingReadAccessTo: Bundle.main.resourceURL!)
+        }
+        return webView
+    }
+
+    func updateUIView(_ webView: WKWebView, context: Context) {}
+}
