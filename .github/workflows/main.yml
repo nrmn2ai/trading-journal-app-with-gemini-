@@ -30,18 +30,12 @@ jobs:
           npm init -y
           npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
-          
-          # ساخت پلتفرم iOS با فایل‌های استاندارد خود کاپاسیتور
           npx cap add ios
 
       - name: Update Target Version & Run Pods
         run: |
           cd ios/App
-          
-          # تغییر امن نسخه iOS به 14.0 در همان فایل استاندارد Podfile
           sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '14.0'/g" Podfile
-          
-          # نصب و همگام‌سازی پادها بدون ارور
           pod install --repo-update
 
       - name: Build iOS App (Unsigned)
