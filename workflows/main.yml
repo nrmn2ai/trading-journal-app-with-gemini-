@@ -1,0 +1,56 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Prepare Web Assets
+        run: |
+          mkdir -p temp_www
+          # کپی کردن تمام فایل‌های مخزن به صورت امن
+          cp -R * temp_www/ 2>/dev/null || true
+          mv temp_www www
+          # اصلاح خودکار نام فایل در صورت وجود حروف بزرگ
+          mv www/Index.html www/index.html 2>/dev/null || true
+
+      - name: Install Capacitor & Setup iOS
+        run: |
+          npm init -y
+          # استفاده از نسخه پایدار ۵ برای رفع قطعی ارور CocoaPods
+          npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
+          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Build iOS App (Unsigned)
+        run: |
+          cd ios/App
+          # کامپایل بدون نیاز به اکانت پولی اپل
+          xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
+
+      - name: Package to IPA
+        run: |
+          cd ios/App/build
+          mkdir -p Payload
+          cp -R App.app Payload/
+          zip -r ../../../NRMN2AI.ipa Payload/
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NRMN2AI-App
+          path: NRMN2AI.ipa
