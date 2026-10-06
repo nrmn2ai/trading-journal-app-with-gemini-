@@ -20,37 +20,39 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Setup Web Assets
+      - name: Create Clean Web Directory
         run: |
-          # ساخت پوشه www و قرار دادن index.html مستقیماً در آن
-          mkdir -p www
-          cp index.html www/index.html
+          # ساخت پوشه موقت برای وب
+          mkdir -p my-web-app
           
-          # کپی کردن سایر فایل‌های جاوااسکریپت و استایل در صورت وجود
-          cp *.js www/ 2>/dev/null || true
-          cp *.css www/ 2>/dev/null || true
+          # کپی کردن فقط فایل‌های وب اصلی به داخل آن
+          cp index.html my-web-app/
+          cp *.js my-web-app/ 2>/dev/null || true
+          cp *.css my-web-app/ 2>/dev/null || true
 
-      - name: Install Capacitor & Add Platform
+      - name: Initialize Capacitor App
         run: |
+          cd my-web-app
           npm init -y
           npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
-          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
+          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir .
           npx cap add ios
 
-      - name: Update Target Version & Run Pods
-        run: |
+          # اصلاح نسخه پلتفرم به 14.0
           cd ios/App
           sed -i '' "s/platform :ios, '[0-9.]*'/platform :ios, '14.0'/g" Podfile
           pod install --repo-update
 
-      - name: Build iOS App (Unsigned)
-        run: |
-          cd ios/App
+          # ساخت خروجی نهایی
           xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
 
+          # انتقال فایل IPA به ریشه اصلی پروژه
+          mkdir -p $GITHUB_WORKSPACE/output
+          cp -R build/App.app $GITHUB_WORKSPACE/output/
+          
       - name: Package to IPA
         run: |
-          cd ios/App/build
+          cd output
           mkdir -p Payload
           cp -R App.app Payload/
           zip -r "$GITHUB_WORKSPACE/NRMN2AI.ipa" Payload/
@@ -61,6 +63,6 @@ jobs:
           files: NRMN2AI.ipa
           tag_name: v1.0.${{ github.run_number }}
           name: "NRMN2AI iOS App v1.0.${{ github.run_number }}"
-          body: "Clean build for NRMN2AI trading journal app."
+          body: "Clean isolated build for NRMN2AI trading journal app."
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
