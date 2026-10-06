@@ -48,10 +48,11 @@ jobs:
           cd ios/App/build
           mkdir -p Payload
           cp -R App.app Payload/
-          zip -r ../../../NRMN2AI.ipa Payload/
+          # ذخیره مستقیم فایل در پوشه اصلی پروژه با مسیر مطلق
+          zip -r "$GITHUB_WORKSPACE/NRMN2AI.ipa" Payload/
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
           name: NRMN2AI-App
-          path: NRMN2AI.ipa
+          path: ${{ github.workspace }}/NRMN2AI.ipa
