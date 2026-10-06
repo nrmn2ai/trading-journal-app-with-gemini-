@@ -20,18 +20,15 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Prepare Web Assets for Capacitor
+      - name: Setup Web Assets
         run: |
-          # ساخت پوشه www برای Capacitor
+          # ساخت پوشه www و قرار دادن index.html مستقیماً در آن
           mkdir -p www
+          cp index.html www/index.html
           
-          # کپی کردن مستقیم فایل index.html و سایر فایل‌های وب به داخل پوشه www
-          cp index.html www/
-          
-          # اگر فایل‌های کمکی مثل جاوااسکریپت یا CSS جداگانه دارید، کپی شوند
-          cp -R *.js www/ 2>/dev/null || true
-          cp -R *.css www/ 2>/dev/null || true
-          cp -R assets/ www/assets/ 2>/dev/null || true
+          # کپی کردن سایر فایل‌های جاوااسکریپت و استایل در صورت وجود
+          cp *.js www/ 2>/dev/null || true
+          cp *.css www/ 2>/dev/null || true
 
       - name: Install Capacitor & Add Platform
         run: |
