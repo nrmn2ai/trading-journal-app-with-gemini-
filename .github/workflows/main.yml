@@ -20,24 +20,18 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Prepare Clean Web Assets
+      - name: Prepare Web Assets for Capacitor
         run: |
-          # ساخت پوشه تمیز برای وب‌اپلیکیشن
+          # ساخت پوشه www برای Capacitor
           mkdir -p www
           
-          # کپی کردن فایل‌های اصلی پروژه (فقط فایل‌های وب و سورس کد شما)
-          # از کپی کردن پوشه‌های سیستم‌عامل، گیت و پوشه‌های موقت جلوگیری می‌کنیم
-          find . -maxdepth 1 ! -name '.' ! -name 'index.html' ! -name '*.html' ! -name '*.js' ! -name '*.css' ! -name 'src' ! -name 'public' ! -name 'assets' ! -name '.git' -exec rm -rf {} + 2>/dev/null || true
+          # کپی کردن مستقیم فایل index.html و سایر فایل‌های وب به داخل پوشه www
+          cp index.html www/
           
-          # انتقال یا کپی فایل‌های وب به داخل پوشه www
-          if [ -d "src" ]; then
-            cp -R src/* www/ 2>/dev/null || true
-          fi
-          if [ -d "public" ]; then
-            cp -R public/* www/ 2>/dev/null || true
-          fi
-          # اگر index.html در ریشه باشد
-          cp index.html www/ 2>/dev/null || true
+          # اگر فایل‌های کمکی مثل جاوااسکریپت یا CSS جداگانه دارید، کپی شوند
+          cp -R *.js www/ 2>/dev/null || true
+          cp -R *.css www/ 2>/dev/null || true
+          cp -R assets/ www/assets/ 2>/dev/null || true
 
       - name: Install Capacitor & Add Platform
         run: |
