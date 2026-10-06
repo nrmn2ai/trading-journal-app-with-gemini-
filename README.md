@@ -1,0 +1,1 @@
+# trading-journal-app-with-gemini-
