@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-13
+    runs-on: macos-latest
 
     steps:
       - name: Checkout Code
@@ -25,31 +25,34 @@ jobs:
           mv temp_www www
           mv www/Index.html www/index.html 2>/dev/null || true
 
-      - name: Install Capacitor & Patch Template
+      - name: Install Cordova & Create Project
         run: |
-          npm init -y
-          npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
+          # نصب Cordova برای حذف کامل نیاز به CocoaPods
+          npm install -g cordova
+          cordova create ios_app com.nrmn2ai.terminal "NRMN2AI"
           
-          echo "--- پچ کردن قالب پایه Capacitor پیش از ساخت پروژه ---"
-          # تغییر اجباری نسخه سیستم‌عامل در فایل‌های الگو قبل از اجرای بیلد
-          find node_modules/@capacitor/ios -type f -name "Podfile" -exec sed -i '' "s/platform :ios.*/platform :ios, '15.0'/g" {} +
-          find node_modules/@capacitor/ios -type f -name "project.pbxproj" -exec sed -i '' "s/IPHONEOS_DEPLOYMENT_TARGET = .*/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g" {} +
-          
-          # ساخت پروژه با فایل‌های اصلاح‌شده
-          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
-          npx cap add ios
+          # انتقال تمام فایل‌های داشبورد شما به درون اپلیکیشن
+          rm -rf ios_app/www/*
+          cp -R www/* ios_app/www/
+
+      - name: Add iOS Platform
+        run: |
+          cd ios_app
+          # ساخت پلتفرم iOS بدون درگیر شدن با پکیج‌های اینترنتی اپل
+          cordova platform add ios
 
       - name: Build iOS App (Unsigned)
         run: |
-          cd ios/App
-          xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
+          cd ios_app/platforms/ios
+          # کامپایل مستقیم و سریع توسط خود Xcode
+          xcodebuild clean build -project NRMN2AI.xcodeproj -scheme NRMN2AI -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
 
       - name: Package to IPA
         run: |
-          cd ios/App/build
+          cd ios_app/platforms/ios/build
           mkdir -p Payload
-          cp -R App.app Payload/
-          zip -r ../../../NRMN2AI.ipa Payload/
+          cp -R NRMN2AI.app Payload/
+          zip -r "$GITHUB_WORKSPACE/NRMN2AI.ipa" Payload/
 
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
