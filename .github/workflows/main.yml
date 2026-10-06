@@ -25,20 +25,20 @@ jobs:
           cp -R * www/ 2>/dev/null || true
           rm -rf www/ios www/.github www/node_modules 2>/dev/null || true
 
-      - name: Install Capacitor & Add Platform (No Pods)
+      - name: Install Capacitor & Add Platform
         run: |
           npm init -y
           npm install @capacitor/core@5 @capacitor/ios@5 @capacitor/cli@5
           npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
           
-          # اضافه کردن پلتفرم بدون اجرای خودکار پادها برای جلوگیری از ارور
-          npx cap add ios --no-pod-install
+          # ساخت پلتفرم iOS
+          npx cap add ios
 
-      - name: Force Fix Podfile & Run Pod Install
+      - name: Fix Podfile & Run Pod Install
         run: |
           cd ios/App
           
-          # بازنویسی کامل Podfile و تنظیم اجباری روی iOS 14.0
+          # بازنویسی کامل Podfile با نسخه سازگار 14.0
           cat << 'EOF' > Podfile
           require_relative '../../node_modules/@capacitor/ios/scripts/pods_helpers'
 
@@ -59,7 +59,7 @@ jobs:
           end
           EOF
           
-          # نصب دستی و موفقیت‌آمیز پادها روی تنظیمات جدید
+          # اجرای مجدد و تمیز پادها روی کانفیگ اصلاح‌شده
           pod install --repo-update
 
       - name: Build iOS App (Unsigned)
