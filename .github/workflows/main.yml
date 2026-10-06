@@ -1,37 +1,55 @@
-name: Deploy Terminal to GitHub Pages
+name: Build iOS IPA
 
 on:
   push:
-    branches: ["main"]
+    branches: [ "main" ]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
-concurrency:
-  group: "pages"
-  cancel-in-progress: false
-
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+  build-ios:
+    # استفاده از سرورهای مک برای کامپایل اپلیکیشن آیفون
+    runs-on: macos-latest
+
     steps:
-      - name: Checkout repository
+      - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup GitHub Pages
-        uses: actions/configure-pages@v4
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          path: '.' 
+          node-version: '20'
 
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Prepare Web Assets
+        run: |
+          mkdir -p www
+          # کپی کردن فایل‌های شما به پوشه بیلد
+          cp index.html www/
+          cp *.png www/ 2>/dev/null || true
+          cp *.gif www/ 2>/dev/null || true
+
+      - name: Install Capacitor & Setup iOS
+        run: |
+          npm init -y
+          npm install @capacitor/core @capacitor/ios @capacitor/cli
+          npx cap init "NRMN2AI" "com.nrmn2ai.terminal" --web-dir www
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Build iOS App (Unsigned)
+        run: |
+          cd ios/App
+          # دستور xcodebuild برای ساخت اپلیکیشن بدون نیاز به اکانت پولی اپل
+          xcodebuild clean build -workspace App.xcworkspace -scheme App -configuration Release -sdk iphoneos CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO CONFIGURATION_BUILD_DIR=$PWD/build
+
+      - name: Package to IPA
+        run: |
+          cd ios/App/build
+          mkdir Payload
+          cp -R App.app Payload/
+          zip -r ../../../NRMN2AI.ipa Payload/
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NRMN2AI-App
+          path: NRMN2AI.ipa
