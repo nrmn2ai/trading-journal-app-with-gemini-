@@ -3,8 +3,12 @@ import WebKit
 
 struct ContentView: View {
     var body: some View {
-        ScrollView {
-            VStack(spacing: 30) {
+        ZStack {
+            Color(red: 18/255, green: 18/255, blue: 18/255) // #121212
+                .edgesIgnoringSafeArea(.all)
+
+            ScrollView {
+                VStack(spacing: 30) {
                 Text("Trading Journal")
                     .font(.largeTitle)
                     .fontWeight(.bold)
@@ -29,12 +33,11 @@ struct ContentView: View {
                     .foregroundColor(.gray)
                     .padding(.top, 40)
                     .padding(.bottom, 20)
+                }
+                .padding(20)
+                .frame(maxWidth: .infinity)
             }
-            .padding(20)
-            .frame(maxWidth: .infinity)
         }
-        .background(Color(red: 18/255, green: 18/255, blue: 18/255)) // #121212
-        .edgesIgnoringSafeArea(.all)
     }
 }
 
