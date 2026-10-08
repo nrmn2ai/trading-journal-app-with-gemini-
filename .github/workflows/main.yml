@@ -1,4 +1,4 @@
-name: Build signed iPhone IPA
+name: Build unsigned IPA
 
 on:
   workflow_dispatch:
@@ -7,150 +7,101 @@ on:
       - "v*"
 
 jobs:
-  build-ipa:
+  build:
     runs-on: macos-latest
-
-    env:
-      TEAM_ID: ${{ vars.APPLE_TEAM_ID }}
-      BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
-      SCHEME: ${{ vars.IOS_SCHEME }}
-      CERTIFICATE_PASSWORD: ${{ secrets.CERTIFICATE_PASSWORD }}
-      CERTIFICATE_P12_BASE64: ${{ secrets.CERTIFICATE_P12_BASE64 }}
-      PROVISIONING_PROFILE_BASE64: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
 
-      - name: Set up project
+      - name: Generate Xcode project if needed
         shell: bash
         run: |
           set -euo pipefail
 
-          if ! find . -maxdepth 5 -name '*.xcodeproj' -print -quit | grep -q . \
-            && ! find . -maxdepth 5 -name '*.xcworkspace' -print -quit | grep -q .; then
-            if [[ -f project.yml ]]; then
-              brew install xcodegen
-              xcodegen generate
-            else
-              echo "No Xcode project/workspace or root project.yml found."
+          PROJECT=$(find . -maxdepth 6 -name '*.xcodeproj' -print -quit)
+          WORKSPACE=$(find . -maxdepth 6 -name '*.xcworkspace' \
+            ! -path '*.xcodeproj/*' -print -quit)
+
+          if [[ -z "$PROJECT" && -z "$WORKSPACE" ]]; then
+            PROJECT_YML=$(find . -maxdepth 6 -name project.yml -print -quit)
+            if [[ -z "$PROJECT_YML" ]]; then
+              echo "Couldn't find an Xcode project, workspace, or project.yml."
               exit 1
             fi
+
+            brew install xcodegen
+            cd "$(dirname "$PROJECT_YML")"
+            xcodegen generate
           fi
 
-      - name: Import signing certificate and profile
+      - name: Build and package unsigned IPA
         shell: bash
         run: |
           set -euo pipefail
 
-          : "${TEAM_ID:?Set the APPLE_TEAM_ID repository variable}"
-          : "${BUNDLE_ID:?Set the IOS_BUNDLE_ID repository variable}"
-          : "${CERTIFICATE_PASSWORD:?Set the CERTIFICATE_PASSWORD secret}"
-          : "${CERTIFICATE_P12_BASE64:?Set the CERTIFICATE_P12_BASE64 secret}"
-          : "${PROVISIONING_PROFILE_BASE64:?Set the PROVISIONING_PROFILE_BASE64 secret}"
-
-          KEYCHAIN="$RUNNER_TEMP/build.keychain"
-          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
-
-          echo "$CERTIFICATE_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
-          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$RUNNER_TEMP/profile.mobileprovision"
-
-          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security set-keychain-settings -lut 21600 "$KEYCHAIN"
-          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security import "$RUNNER_TEMP/certificate.p12" \
-            -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN"
-          security set-key-partition-list \
-            -S apple-tool:,apple:,codesign: -s \
-            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
-          security list-keychains -d user -s "$KEYCHAIN"
-
-          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
-          PROFILE_UUID=$(/usr/libexec/PlistBuddy \
-            -c 'Print UUID' /dev/stdin \
-            <<< "$(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision")")
-          PROFILE_NAME=$(/usr/libexec/PlistBuddy \
-            -c 'Print Name' /dev/stdin \
-            <<< "$(security cms -D -i "$RUNNER_TEMP/profile.mobileprovision")")
-
-          cp "$RUNNER_TEMP/profile.mobileprovision" \
-            "$HOME/Library/MobileDevice/Provisioning Profiles/$PROFILE_UUID.mobileprovision"
-
-          echo "PROFILE_NAME=$PROFILE_NAME" >> "$GITHUB_ENV"
-
-      - name: Archive and export IPA
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          PROJECT=$(find . -maxdepth 5 -name '*.xcodeproj' -print -quit)
-          WORKSPACE=$(find . -maxdepth 5 -name '*.xcworkspace' -print -quit)
-
-          if [[ -z "$SCHEME" ]]; then
-            if [[ -n "$WORKSPACE" ]]; then
-              CONTAINER=(-workspace "$WORKSPACE")
-            else
-              CONTAINER=(-project "$PROJECT")
-            fi
-
-            SCHEME=$(xcodebuild -list -json "${CONTAINER[@]}" |
-              /usr/bin/ruby -rjson -e '
-                j=JSON.parse(STDIN.read)
-                key=j["workspace"] ? "schemes" : "schemes"
-                puts j.dig("workspace", key)&.first || j.dig("project", key)&.first
-              ')
-          fi
+          PROJECT=$(find . -maxdepth 6 -name '*.xcodeproj' -print -quit)
+          WORKSPACE=$(find . -maxdepth 6 -name '*.xcworkspace' \
+            ! -path '*.xcodeproj/*' -print -quit)
 
           if [[ -n "$WORKSPACE" ]]; then
             CONTAINER=(-workspace "$WORKSPACE")
-          else
+          elif [[ -n "$PROJECT" ]]; then
             CONTAINER=(-project "$PROJECT")
+          else
+            echo "Couldn't find the generated Xcode project or workspace."
+            exit 1
           fi
 
-          xcodebuild archive \
+          SCHEME="${{ vars.IOS_SCHEME }}"
+          if [[ -z "$SCHEME" ]]; then
+            SCHEME=$(xcodebuild -list -json "${CONTAINER[@]}" |
+              ruby -rjson -e '
+                j = JSON.parse(STDIN.read)
+                object = j["project"] || j["workspace"] || {}
+                puts object.fetch("schemes", []).first
+              ')
+          fi
+
+          if [[ -z "$SCHEME" ]]; then
+            echo "Couldn't detect the Xcode scheme. Set IOS_SCHEME in repository variables."
+            exit 1
+          fi
+
+          echo "Building scheme: $SCHEME"
+
+          DERIVED="$RUNNER_TEMP/DerivedData"
+          xcodebuild \
             "${CONTAINER[@]}" \
             -scheme "$SCHEME" \
             -configuration Release \
+            -sdk iphoneos \
             -destination "generic/platform=iOS" \
-            -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
-            CODE_SIGN_IDENTITY="Apple Distribution" \
-            DEVELOPMENT_TEAM="$TEAM_ID" \
-            PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROFILE_NAME"
+            -derivedDataPath "$DERIVED" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            build
 
-          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>ad-hoc</string>
-            <key>teamID</key>
-            <string>$TEAM_ID</string>
-            <key>signingStyle</key>
-            <string>manual</string>
-            <key>provisioningProfiles</key>
-            <dict>
-              <key>$BUNDLE_ID</key>
-              <string>$PROFILE_NAME</string>
-            </dict>
-          </dict>
-          </plist>
-          EOF
+          APP=$(find "$DERIVED/Build/Products/Release-iphoneos" \
+            -maxdepth 1 -type d -name '*.app' -print -quit)
 
-          xcodebuild -exportArchive \
-            -archivePath "$RUNNER_TEMP/App.xcarchive" \
-            -exportPath "$RUNNER_TEMP/export" \
-            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+          if [[ -z "$APP" ]]; then
+            echo "Build finished, but no .app was found."
+            exit 1
+          fi
 
-          mkdir -p "$GITHUB_WORKSPACE/output"
-          cp "$RUNNER_TEMP/export/"*.ipa "$GITHUB_WORKSPACE/output/"
+          PACKAGE="$RUNNER_TEMP/ipa-package"
+          mkdir -p "$PACKAGE/Payload"
+          cp -R "$APP" "$PACKAGE/Payload/"
 
-      - name: Upload IPA
+          cd "$PACKAGE"
+          zip -qry "$GITHUB_WORKSPACE/unsigned.ipa" Payload
+
+      - name: Upload unsigned IPA
         uses: actions/upload-artifact@v4
         with:
-          name: signed-iphone-ipa
-          path: output/*.ipa
+          name: unsigned-iphone-ipa
+          path: unsigned.ipa
           if-no-files-found: error
           retention-days: 14
