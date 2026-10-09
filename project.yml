@@ -1,2 +1,8 @@
 sources:
-  - path: AppSources
+  - path: AppSources/ContentView.swift
+  - path: AppSources/GIFView.swift
+  - path: AppSources/TradingJournalApp.swift
+  - path: AppSources/Golden Bull Market Emblem.png
+    buildPhase: resources
+  - path: AppSources/Trading_candles_moving_together_20261006131456.gif
+    buildPhase: resources
