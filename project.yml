@@ -1,4 +1,4 @@
-name: TradingJournal
+name: Trading-journal-iphone
 sources:
   - path: AppSources/ContentView.swift
   - path: AppSources/GIFView.swift
