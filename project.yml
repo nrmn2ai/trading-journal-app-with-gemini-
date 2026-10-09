@@ -1,3 +1,4 @@
+name: TradingJournal
 sources:
   - path: AppSources/ContentView.swift
   - path: AppSources/GIFView.swift
