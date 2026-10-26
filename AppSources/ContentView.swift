@@ -113,8 +113,7 @@ private struct JournalScreen: View {
                             .foregroundColor(.white)
                         TextEditor(text: $dailyNote)
                             .frame(minHeight: 92)
-                            .scrollContentBackground(.hidden)
-                            .padding(8)
+                                            .padding(8)
                             .background(JournalStyle.panel)
                             .clipShape(RoundedRectangle(cornerRadius: 12))
                             .overlay(alignment: .topLeading) {
@@ -324,7 +323,6 @@ private struct SettingsScreen: View {
                         .foregroundColor(.secondary)
                 }
             }
-            .scrollContentBackground(.hidden)
         }
         .navigationTitle("Journal setup")
     }
@@ -369,7 +367,7 @@ private struct AddTradeSheet: View {
             Form {
                 Section(header: Text("Trade")) {
                     TextField("Symbol (e.g. EUR/USD)", text: $symbol)
-                        .textInputAutocapitalization(.characters)
+                        .autocapitalization(.allCharacters)
                     Picker("Direction", selection: $side) {
                         ForEach(TradeSide.allCases) { option in
                             Text(option.rawValue).tag(option)
