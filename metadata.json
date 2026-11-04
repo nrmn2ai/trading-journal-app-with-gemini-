@@ -1,0 +1,7 @@
+{
+  "name": "NRMN2AI | iPhone Trading OS",
+  "description": "سیستم عامل معاملاتی و ژورنال ۶۰ روزه پراپ برای آیفون با چارت زنده، لاگ پوزیشن، مدیریت ریسک و وضعیت روانی.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
+

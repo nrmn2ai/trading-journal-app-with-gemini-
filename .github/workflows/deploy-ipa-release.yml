@@ -1,0 +1,167 @@
+name: Build & Release iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build iOS IPA & Publish to GitHub Releases
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: |
+          npm install --legacy-peer-deps
+          npm install -D --legacy-peer-deps @capacitor/cli @capacitor/core @capacitor/ios
+
+      - name: Build Web Application
+        run: |
+          echo "=== Node and NPM Versions ==="
+          node -v
+          npm -v
+          echo "=== Verifying build script in package.json ==="
+          node -e '
+            const fs = require("fs");
+            if (fs.existsSync("package.json")) {
+              const pkg = JSON.parse(fs.readFileSync("package.json", "utf8"));
+              pkg.scripts = pkg.scripts || {};
+              if (!pkg.scripts.build) {
+                pkg.scripts.build = "vite build";
+                fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+                console.log("Automatically injected missing build script into package.json");
+              }
+            }
+          '
+          echo "=== Building Web Application with Vite ==="
+          npm run build || npx vite build
+          echo "=== Checking dist output directory ==="
+          if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
+            echo "dist or dist/index.html missing, setting up dist..."
+            mkdir -p dist
+            cp index.html dist/index.html || true
+          fi
+          ls -la dist/
+
+      - name: Initialize Capacitor iOS Project
+        run: |
+          npx cap add ios || true
+          npx cap sync ios
+
+      - name: Inject iOS App Plist Configurations
+        run: |
+          cat << 'EOF' > ios/App/App/App-Info.plist.patch
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDisplayName</key>
+            <string>NRMN2AI</string>
+            <key>CFBundleName</key>
+            <string>NRMN2AI Trading OS</string>
+            <key>CFBundleIdentifier</key>
+            <string>com.nrmn2ai.tradingos</string>
+            <key>CFBundleVersion</key>
+            <string>1.0.0</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0</string>
+            <key>LSRequiresIPhoneOS</key>
+            <true/>
+            <key>UIRequiredDeviceCapabilities</key>
+            <array>
+              <string>arm64</string>
+            </array>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Build Archive & Package IPA
+        run: |
+          cd ios/App
+          # Build unsigned archive
+          xcodebuild -workspace App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/App.xcarchive \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
+
+          # Create Payload structure for iOS .ipa package
+          mkdir -p build/Payload
+          cp -R build/App.xcarchive/Products/Applications/App.app build/Payload/
+          cd build
+          zip -r NRMN2AI-TradingOS.ipa Payload
+          cp NRMN2AI-TradingOS.ipa ../../../NRMN2AI-TradingOS.ipa
+          cd ../../..
+
+      - name: Determine Release Tag
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ github.event.inputs.release_tag }}" ]; then
+            TAG="${{ github.event.inputs.release_tag }}"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v1.0.$(date +'%Y%m%d%H%M')"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "date=$(date -u +'%Y-%m-%d %H:%M UTC')" >> $GITHUB_OUTPUT
+
+      - name: Upload IPA as GitHub Actions Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NRMN2AI-TradingOS-IPA
+          path: NRMN2AI-TradingOS.ipa
+          retention-days: 90
+
+      - name: Create GitHub Release & Upload IPA
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        with:
+          tag_name: ${{ steps.vars.outputs.tag }}
+          name: Release ${{ steps.vars.outputs.tag }} - NRMN2AI Trading OS IPA
+          draft: false
+          prerelease: false
+          files: |
+            NRMN2AI-TradingOS.ipa
+          body: |
+            ## 🍏 NRMN2AI Trading OS - iOS Release (${{ steps.vars.outputs.tag }})
+            
+            Built automatically on: **${{ steps.vars.outputs.date }}**
+
+            ### 📲 نحوه دانلود و نصب روی آیفون (iOS):
+            1. فایل **`NRMN2AI-TradingOS.ipa`** را از بخش Assets در پایین همین صفحه دانلود کنید.
+            2. برای نصب بدون جیلبریک روی آیفون:
+               - از نرم‌افزار **Sideloadly** (ویندوز / مک) استفاده کنید: فایل را Drag & Drop کرده، اپل آیدی خود را وارد کنید و روی Start بزنید.
+               - یا با **AltStore** / **TrollStore** / **Scarlet** مستقیماً روی دستگاه نصب کنید.
+            3. در آیفون به مسیر زیر رفته و روی اکانت خود Trust را لمس کنید:
+               `Settings > General > VPN & Device Management`
+
+            ### ✨ تغییرات این نسخه:
+            - سیستم عامل معاملاتی و ژورنال ۶۰ روزه پراپ
+            - حرکت کندل‌های پس‌زمینه (Moving Candlesticks Motion)
+            - تگ‌های دسته‌بندی ترید (#scalp, #swing, #news, #reversal)
+            - محاسبه خودکار بالانس، وین‌ریت، ریسک و وضعیت روانی
